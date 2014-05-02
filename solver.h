@@ -6,13 +6,14 @@ extern "C"
 {
 #endif
 
-typedef struct {
+typedef struct tile {
     char x;
     char y;
     char nm_count;
     char flagged;
     char mine;
     char cleared;
+    struct tile *neighbors[8];
 } tile_t;
 
 void set_constraints(int w, int h, int mines);

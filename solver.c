@@ -121,6 +121,20 @@ tile_t **allocate_array(int m, int n)
             tile_t *t = &rows[x][y];
             t->x = x;
             t->y = y;
+            
+            int i;
+            for(i = 0; i < 8; i++)
+            {
+                int nX = x + offsets[i][0];
+                int nY = y + offsets[i][1];
+                
+                if(nX < 0 || nX >= m)
+                    continue;
+                if(nY < 0 || nY >= n)
+                    continue;
+                
+                t->neighbors[i] = &rows[nX][nY];
+            }
         }
     }
     return rows;
@@ -145,17 +159,12 @@ void assign_vals(tile_t **board)
             int target = 0;
             for(i = 0; i < 8; i++)
             {
-                int nX = x + offsets[i][0];
-                int nY = y + offsets[i][1];
-
-                if(nX < 0 || nX >= board_width)
-                    continue;
-                if(nY < 0 || nY >= board_height)
+                tile_t *nb = tile->neighbors[i];
+                
+                if(!nb)
                     continue;
 
-                tile_t nb = board[nX][nY];
-
-                if(nb.mine)
+                if(nb->mine)
                     target++;
             }
 
@@ -164,7 +173,7 @@ void assign_vals(tile_t **board)
     }
 }
 
-void clear(int x, int y, tile_t **board)
+void clear_tile(int x, int y, tile_t **board)
 {
     tile_t *tile = &board[x][y];
     tile->cleared = 1;
@@ -178,16 +187,12 @@ void clear(int x, int y, tile_t **board)
         int i;
         for(i = 0; i < 8; i++)
         {
-            int nX = x + offsets[i][0];
-            int nY = y + offsets[i][1];
-
-            if(nX < 0 || nX >= board_width)
-                continue;
-            if(nY < 0 || nY >= board_height)
+            tile_t *nb = tile->neighbors[i];
+            if(!nb)
                 continue;
 
-            if(!board[nX][nY].cleared)
-                clear(nX, nY, board);
+            if(!nb->cleared)
+                clear_tile(nb->x, nb->y, board);
         }
     }
 }
@@ -222,7 +227,7 @@ tile_t **gen_random_board(int start_x, int start_y)
 tile_t **gen_no_guess_board(int start_x, int start_y)
 {
     tile_t **board = gen_random_board(start_x, start_y);
-    clear(start_x, start_y, board);
+    clear_tile(start_x, start_y, board);
     solve_board(board);
 
     int its = 0;
@@ -231,22 +236,22 @@ tile_t **gen_no_guess_board(int start_x, int start_y)
     {
         free_board(board);
         board = gen_random_board(start_x, start_y);
-        clear(start_x, start_y, board);
+        clear_tile(start_x, start_y, board);
         if(its++ > GEN_MAX)
             exit(0);
     }
 
     // Cleaning
-    int x, y;
-    for(x = 0; x < board_width; x++)
-    {
-        for(y = 0; y < board_height; y++)
-        {
-            tile_t *tile = &board[x][y];
-            tile->cleared = 0;
-            tile->flagged = 0;
-        }
-    }
+//    int x, y;
+//    for(x = 0; x < board_width; x++)
+//    {
+//        for(y = 0; y < board_height; y++)
+//        {
+//            tile_t *tile = &board[x][y];
+//            tile->cleared = 0;
+//            tile->flagged = 0;
+//        }
+//    }
 
     printf("Board generated in %d %s.\n", its, its == 1 ? "iteration" : "iterations");
 
@@ -257,18 +262,14 @@ list_t candidate_list(int x, int y, tile_t **board)
 {
     list_t cand = empty_list();
     int candidates = 0;
+    tile_t center = board[x][y];
     int i;
     for(i = 0; i < 8; i++)
     {
-        int nX = x + offsets[i][0];
-        int nY = y + offsets[i][1];
-
-        if(nX < 0 || nX >= board_width)
+        tile_t *tile = center.neighbors[i];
+        if(!tile)
             continue;
-        if(nY < 0 || nY >= board_height)
-            continue;
-
-        tile_t *tile = &board[nX][nY];
+        
         if(!tile->cleared && !tile->flagged)
         {
             add_to_list(&cand, new_node(tile));
@@ -280,20 +281,16 @@ list_t candidate_list(int x, int y, tile_t **board)
 
 char remaining(int x, int y, tile_t **board)
 {
-    char rem = board[x][y].nm_count;
     int i;
+    tile_t center = board[x][y];
+    char rem = center.nm_count;
     for(i = 0; i < 8; i++)
     {
-        int nX = x + offsets[i][0];
-        int nY = y + offsets[i][1];
-
-        if(nX < 0 || nX >= board_width)
+        tile_t *tile = center.neighbors[i];
+        if(!tile)
             continue;
-        if(nY < 0 || nY >= board_height)
-            continue;
-
-        tile_t tile = board[nX][nY];
-        if(tile.flagged)
+        
+        if(tile->flagged)
             rem--;
     }
 
@@ -302,20 +299,16 @@ char remaining(int x, int y, tile_t **board)
 
 char flags(int x, int y, tile_t **board)
 {
+    tile_t center = board[x][y];
     char rem = 0;
     int i;
     for(i = 0; i < 8; i++)
     {
-        int nX = x + offsets[i][0];
-        int nY = y + offsets[i][1];
-
-        if(nX < 0 || nX >= board_width)
+        tile_t *tile = center.neighbors[i];
+        if(!tile)
             continue;
-        if(nY < 0 || nY >= board_height)
-            continue;
-
-        tile_t tile = board[nX][nY];
-        if(tile.flagged)
+        
+        if(tile->flagged)
             rem++;
     }
 
@@ -344,17 +337,13 @@ char perform_iteration(tile_t **board)
             {
                 for(i = 0; i < 8; i++)
                 {
-                    int nX = x + offsets[i][0];
-                    int nY = y + offsets[i][1];
-
-                    if(nX < 0 || nX >= board_width)
-                        continue;
-                    if(nY < 0 || nY >= board_height)
+                    tile_t *nb = tile->neighbors[i];
+                    if(!nb)
                         continue;
                     
-                    if(!board[nX][nY].flagged && !board[nX][nY].cleared)
+                    if(!nb->flagged && !nb->cleared)
                     {
-                        clear(nX, nY, board);
+                        clear_tile(nb->x, nb->y, board);
                         move_made = 1;
                     }
                 }
@@ -362,26 +351,19 @@ char perform_iteration(tile_t **board)
 
             for(i = 0; i < 8; i++)
             {
-                int nX = x + offsets[i][0];
-                int nY = y + offsets[i][1];
-
-                if(nX < 0 || nX >= board_width)
+                tile_t *nb = tile->neighbors[i];
+                if(!nb)
                     continue;
-                if(nY < 0 || nY >= board_height)
-                    continue;
-
-                tile_t *nb = &board[nX][nY];
 
                 if(!nb->cleared || nb->nm_count == 0)
                     continue;
 
-                list_t cand_b = candidate_list(nX, nY, board);
-                char rem_b = remaining(nX, nY, board);
+                list_t cand_b = candidate_list(nb->x, nb->y, board);
+                char rem_b = remaining(nb->x, nb->y, board);
 
                 // printf("%d\t %d\n", rem_a, rem_b);
 
                 // First condition
-                char intersect = list_intersection(&cand_b, &cand_a);
                 if(list_is_subset(&cand_b, &cand_a))
                 {
                     if(rem_a == rem_b)
@@ -391,7 +373,7 @@ char perform_iteration(tile_t **board)
                         {
                             if(!list_contains_tile(&cand_a, node->tile))
                             {
-                                clear(node->tile->x, node->tile->y, board);
+                                clear_tile(node->tile->x, node->tile->y, board);
                                 //printf("a\n");
                                 move_made = 1;
                             }
