@@ -224,6 +224,53 @@ tile_t **gen_random_board(int start_x, int start_y)
     return empty;
 }
 
+int adjust_random_board(int start_x, int start_y, tile_t **prev)
+{
+    tile_t **empty = allocate_array(board_width, board_height);
+
+    int new_needed = 0;
+    int mines = 0;
+
+    int i, j;
+    for(i = 0; i < board_width; i++)
+    {
+        for(j = 0; j < board_height; j++)
+        {
+            tile_t *t = &prev[i][j];
+
+            if(!t->flagged && t->mine)
+            {
+                new_needed++;
+                t->mine = 0;
+            }
+
+            t->cleared = 0;
+            t->flagged = 0;
+            t->nm_count = 0;
+        }
+    }
+
+    while(mines < new_needed)
+    {
+        int nX = rand() % board_width;
+        int nY = rand() % board_height;
+
+        if(nX > start_x - 2 && nX < start_x + 2 && nY > start_y - 2 && nY < start_y + 2)
+            continue;
+
+        tile_t *tile = &prev[nX][nY];
+
+        if(tile->mine)
+            continue;
+
+        tile->mine = 1;
+        mines++;
+    }
+
+    assign_vals(prev);
+    return new_needed;
+}
+
 tile_t **gen_no_guess_board(int start_x, int start_y)
 {
     tile_t **board = gen_random_board(start_x, start_y);
@@ -232,10 +279,27 @@ tile_t **gen_no_guess_board(int start_x, int start_y)
 
     int its = 0;
 
+    int ppn = -1;
+    int pn = 0;
+
     while(!solve_board(board))
     {
-        free_board(board);
-        board = gen_random_board(start_x, start_y);
+        //free_board(board);
+        //board = gen_random_board(start_x, start_y);
+        int cn = adjust_random_board(start_x, start_y, board);
+        if(cn == pn && cn == ppn)
+        {
+            // We might be stuck... Best just to nuke it and start over
+            free_board(board);
+            board = gen_random_board(start_x, start_y);
+            pn = 0;
+            ppn = -1;
+        }
+        else
+        {
+            ppn = pn;
+            pn = cn;
+        }
         clear_tile(start_x, start_y, board);
         if(its++ > GEN_MAX)
             exit(0);
